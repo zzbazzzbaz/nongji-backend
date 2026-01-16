@@ -1,0 +1,17 @@
+[project]
+name = "vehicle-inspection"
+version = "0.1.0"
+description = "农机检测小程序后端"
+requires-python = ">=3.10"
+dependencies = [
+    "django>=4.2,<5.0",
+    "django-simpleui",
+    "djangorestframework",
+    "python-docx",
+    "alibabacloud-ocr-api20210707",
+    "python-dotenv",
+    "pillow",
+]
+
+[tool.uv]
+dev-dependencies = []

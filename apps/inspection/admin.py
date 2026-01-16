@@ -1,0 +1,155 @@
+from django.contrib import admin
+from django.urls import path
+from django.http import JsonResponse
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from .models import InspectionRecord
+from .services import OCRService
+
+
+@admin.register(InspectionRecord)
+class InspectionRecordAdmin(admin.ModelAdmin):
+    list_display = ['license_plate_number', 'owner', 'vehicle_type', 'brand', 'created_by', 'created_at', 'export_link']
+    list_filter = ['vehicle_type', 'created_at']
+    search_fields = ['license_plate_number', 'owner', 'chassis_number', 'engine_number']
+    readonly_fields = ['created_at', 'updated_at', 'created_by', 'ocr_button']
+    date_hierarchy = 'created_at'
+    
+    class Media:
+        js = ('admin/js/ocr_recognize.js',)
+    
+    fieldsets = (
+        ('OCR识别', {
+            'fields': ('ocr_button',),
+            'classes': ('wide',),
+        }),
+        ('图片资料', {
+            'fields': ('license_front_image', 'license_back_image', 'plate_image'),
+        }),
+        ('正页信息', {
+            'fields': (
+                'license_plate_number', 'vehicle_type', 'owner', 'address',
+                'chassis_number', 'trailer_frame_number', 'engine_number',
+                'brand', 'model_name', 'registration_date', 'issue_date', 'issue_authority'
+            )
+        }),
+        ('副页信息', {
+            'fields': (
+                'tractor_min_weight', 'harvester_weight', 'tractor_max_load',
+                'passenger_capacity', 'overall_dimension', 'inspection_record'
+            )
+        }),
+        ('检验报告', {
+            'fields': ('brake_report_image', 'headlight_report_image')
+        }),
+        ('其他信息', {
+            'fields': ('body_color', 'production_date')
+        }),
+        ('系统信息', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def ocr_button(self, obj):
+        return mark_safe('''
+            <div style="margin: 10px 0;">
+                <button type="button" id="ocr-btn" onclick="doOCR()" 
+                    style="padding: 10px 20px; background: #417690; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    🔍 OCR识别
+                </button>
+                <span style="margin-left: 10px; color: #666;">上传图片后点击识别，自动填充表单</span>
+            </div>
+        ''')
+    ocr_button.short_description = '操作'
+    
+    def export_link(self, obj):
+        return format_html(
+            '<a href="/api/v1/inspections/{}/export/" target="_blank">导出</a>',
+            obj.pk
+        )
+    export_link.short_description = '导出'
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('ocr-recognize/', self.admin_site.admin_view(self.ocr_recognize_view), name='inspection_ocr_recognize'),
+        ]
+        return custom_urls + urls
+    
+    def ocr_recognize_view(self, request):
+        """OCR识别接口"""
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'message': '仅支持POST请求'})
+        
+        if not request.user.can_use_ocr:
+            return JsonResponse({'success': False, 'message': '您没有OCR识别权限'})
+        
+        result = {}
+        
+        # 识别行驶证正面
+        license_front = request.FILES.get('license_front_image')
+        if license_front:
+            try:
+                ocr_result = OCRService.recognize_vehicle_license(license_front)
+                ocr_result.pop('raw_data', None)
+                result.update(ocr_result)
+            except Exception as e:
+                return JsonResponse({'success': False, 'message': f'行驶证正面识别失败: {str(e)}'})
+        
+        # 识别行驶证副页
+        license_back = request.FILES.get('license_back_image')
+        if license_back:
+            try:
+                ocr_result = OCRService.recognize_vehicle_license(license_back)
+                ocr_result.pop('raw_data', None)
+                # 副页主要提取这些字段
+                for key in ['tractor_min_weight', 'harvester_weight', 'tractor_max_load', 
+                           'passenger_capacity', 'overall_dimension', 'inspection_record']:
+                    if ocr_result.get(key):
+                        result[key] = ocr_result[key]
+            except Exception as e:
+                return JsonResponse({'success': False, 'message': f'行驶证副页识别失败: {str(e)}'})
+        
+        # 识别车牌
+        plate_image = request.FILES.get('plate_image')
+        if plate_image:
+            try:
+                ocr_result = OCRService.recognize_car_number(plate_image)
+                ocr_result.pop('raw_data', None)
+                if ocr_result.get('license_plate_number'):
+                    result['plate_ocr_result'] = ocr_result['license_plate_number']
+                    if not result.get('license_plate_number'):
+                        result['license_plate_number'] = ocr_result['license_plate_number']
+            except Exception as e:
+                return JsonResponse({'success': False, 'message': f'车牌识别失败: {str(e)}'})
+        
+        if not result:
+            return JsonResponse({'success': False, 'message': '请先上传图片'})
+        
+        return JsonResponse({'success': True, 'data': result})
+    
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(created_by=request.user)
+    
+    def has_change_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is not None:
+            return obj.created_by == request.user
+        return True
+    
+    def has_delete_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return True
+        if obj is not None:
+            return obj.created_by == request.user
+        return True
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
