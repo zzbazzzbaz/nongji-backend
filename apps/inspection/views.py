@@ -246,6 +246,72 @@ class InspectionDetailView(APIView):
         })
 
 
+class InspectionUploadImageView(APIView):
+    """上传检验记录图片"""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+    
+    # 允许的图片字段
+    ALLOWED_FIELDS = [
+        'license_front_image',
+        'license_back_image', 
+        'plate_image',
+        'brake_report_image',
+        'headlight_report_image'
+    ]
+    
+    def post(self, request, pk):
+        """
+        上传单张图片到检验记录
+        """
+        obj = get_object_or_404(InspectionRecord, pk=pk, created_by=request.user)
+        
+        # 查找上传的图片字段
+        uploaded_field = None
+        uploaded_file = None
+        for field in self.ALLOWED_FIELDS:
+            if field in request.FILES:
+                uploaded_field = field
+                uploaded_file = request.FILES[field]
+                break
+        
+        if not uploaded_field:
+            return Response({
+                'code': 400,
+                'message': '请上传图片',
+                'data': None
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 验证文件类型
+        if not uploaded_file.content_type.startswith('image/'):
+            return Response({
+                'code': 400,
+                'message': '请上传图片文件',
+                'data': None
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 验证文件大小（最大5MB）
+        if uploaded_file.size > 5 * 1024 * 1024:
+            return Response({
+                'code': 400,
+                'message': '图片大小不能超过5MB',
+                'data': None
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 保存图片
+        setattr(obj, uploaded_field, uploaded_file)
+        obj.save(update_fields=[uploaded_field, 'updated_at'])
+        
+        return Response({
+            'code': 200,
+            'message': '上传成功',
+            'data': {
+                'id': obj.id,
+                'field': uploaded_field
+            }
+        })
+
+
 class InspectionExportView(APIView):
     """导出单个Word文档"""
     permission_classes = [IsAuthenticated]

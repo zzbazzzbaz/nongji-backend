@@ -9,6 +9,7 @@ urlpatterns = [
     # 检验记录 CRUD
     path('inspections/', views.InspectionListCreateView.as_view(), name='inspection-list-create'),
     path('inspections/<int:pk>/', views.InspectionDetailView.as_view(), name='inspection-detail'),
+    path('inspections/<int:pk>/upload-image/', views.InspectionUploadImageView.as_view(), name='inspection-upload-image'),
     
     # 导出
     path('inspections/<int:pk>/export/', views.InspectionExportView.as_view(), name='inspection-export'),
