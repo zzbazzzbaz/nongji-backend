@@ -1,10 +1,10 @@
 from django.contrib import admin
 from django.urls import path
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from .models import InspectionRecord
-from .services import OCRService
+from .services import OCRService, WordExportService
 
 
 @admin.register(InspectionRecord)
@@ -14,6 +14,7 @@ class InspectionRecordAdmin(admin.ModelAdmin):
     search_fields = ['license_plate_number', 'owner', 'chassis_number', 'engine_number']
     readonly_fields = ['created_at', 'updated_at', 'created_by', 'ocr_button']
     date_hierarchy = 'created_at'
+    actions = ['export_selected_records']
     
     class Media:
         js = ('admin/js/ocr_recognize.js',)
@@ -188,3 +189,31 @@ class InspectionRecordAdmin(admin.ModelAdmin):
         if not request.user.can_use_ocr and 'ocr_button' in readonly:
             readonly.remove('ocr_button')
         return readonly
+    
+    @admin.action(description='导出选中记录为Word文档')
+    def export_selected_records(self, request, queryset):
+        """批量导出选中的检验记录为Word文档（ZIP压缩包）"""
+        if queryset.count() == 1:
+            # 单条记录直接导出Word
+            record = queryset.first()
+            try:
+                doc_buffer, filename = WordExportService.export_single(record)
+                response = HttpResponse(
+                    doc_buffer.getvalue(),
+                    content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+            except Exception as e:
+                self.message_user(request, f'导出失败: {str(e)}', level='error')
+                return
+        else:
+            # 多条记录导出ZIP
+            try:
+                zip_buffer, filename = WordExportService.export_batch(queryset)
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                return response
+            except Exception as e:
+                self.message_user(request, f'批量导出失败: {str(e)}', level='error')
+                return

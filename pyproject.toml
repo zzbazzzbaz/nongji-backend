@@ -11,6 +11,7 @@ dependencies = [
     "alibabacloud-ocr-api20210707",
     "python-dotenv",
     "pillow",
+    "docxtpl>=0.20.2",
 ]
 
 [tool.uv]

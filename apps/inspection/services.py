@@ -1,9 +1,11 @@
 import io
 import json
+import os
 import zipfile
 from datetime import datetime
 from django.conf import settings
-from docx import Document
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm
 
 
 class OCRService:
@@ -118,59 +120,113 @@ class OCRService:
 
 
 class WordExportService:
-    """Word文档导出服务"""
+    """Word文档导出服务 - 基于docxtpl模板引擎"""
+    
+    # 模板文件路径
+    TEMPLATE_PATH = os.path.join(
+        os.path.dirname(__file__), 
+        'templates', 
+        'inspection_template.docx'
+    )
     
     @staticmethod
-    def export_single(record):
-        """导出单个检验记录为Word文档"""
-        doc = Document()
+    def _format_date(date_obj, fmt='%Y-%m-%d'):
+        """格式化日期"""
+        if date_obj:
+            return date_obj.strftime(fmt)
+        return ''
+    
+    @staticmethod
+    def _get_image_path(image_field):
+        """获取图片的绝对路径"""
+        if image_field and image_field.name:
+            try:
+                return image_field.path
+            except Exception:
+                return os.path.join(settings.MEDIA_ROOT, image_field.name)
+        return None
+    
+    @classmethod
+    def export_single(cls, record):
+        """
+        导出单个检验记录为Word文档
+        使用docxtpl模板引擎，支持占位符替换和图片插入
+        """
+        # 加载模板
+        doc = DocxTemplate(cls.TEMPLATE_PATH)
         
-        # 标题
-        doc.add_heading('农机安全技术检验合格证明', 0)
+        # 准备上下文数据
+        context = {
+            # 基本信息
+            'license_plate_number': record.license_plate_number or '',
+            'vehicle_type': record.vehicle_type or '',
+            'owner': record.owner or '',
+            'address': record.address or '',
+            'chassis_number': record.chassis_number or '',
+            'trailer_frame_number': record.trailer_frame_number or '',
+            'engine_number': record.engine_number or '',
+            'brand': record.brand or '',
+            'model_name': record.model_name or '',
+            'body_color': record.body_color or '',
+            'overall_dimension': record.overall_dimension or '',
+            
+            # 日期字段
+            'production_date': cls._format_date(record.production_date),
+            'registration_date': cls._format_date(record.registration_date),
+            'issue_date': cls._format_date(record.issue_date),
+            'created_at': cls._format_date(record.created_at, '%Y-%m-%d'),
+            
+            # 质量参数
+            'tractor_min_weight': record.tractor_min_weight or '',
+            'harvester_weight': record.harvester_weight or '',
+            'tractor_max_load': record.tractor_max_load or '',
+            'passenger_capacity': record.passenger_capacity or '',
+            
+            # 检验记录
+            'inspection_record': record.inspection_record or '',
+            'issue_authority': record.issue_authority or '',
+        }
         
-        # 基本信息表格
-        table = doc.add_table(rows=12, cols=4)
-        table.style = 'Table Grid'
+        # 处理图片 - 制动性能检验报告
+        brake_image_path = cls._get_image_path(record.brake_report_image)
+        if brake_image_path and os.path.exists(brake_image_path):
+            context['brake_report_image'] = InlineImage(
+                doc, brake_image_path, width=Mm(150)
+            )
+        else:
+            context['brake_report_image'] = ''
         
-        fields = [
-            ('号牌号码', record.license_plate_number, '类型', record.vehicle_type),
-            ('所有人', record.owner, '住址', record.address),
-            ('底盘号/机架号', record.chassis_number, '发动机号码', record.engine_number),
-            ('品牌', record.brand, '型号', record.model_name),
-            ('机身颜色', record.body_color, '生产日期', str(record.production_date or '')),
-            ('登记日期', str(record.registration_date or ''), '发证日期', str(record.issue_date or '')),
-            ('发证机关', record.issue_authority, '', ''),
-            ('拖拉机最小使用质量', record.tractor_min_weight, '联合收割机质量', record.harvester_weight),
-            ('拖拉机最大允许载质量', record.tractor_max_load, '准乘人数', record.passenger_capacity),
-            ('外廓尺寸(毫米)', record.overall_dimension, '', ''),
-            ('检验记录', record.inspection_record, '', ''),
-        ]
+        # 处理图片 - 前照灯检验报告
+        headlight_image_path = cls._get_image_path(record.headlight_report_image)
+        if headlight_image_path and os.path.exists(headlight_image_path):
+            context['headlight_report_image'] = InlineImage(
+                doc, headlight_image_path, width=Mm(150)
+            )
+        else:
+            context['headlight_report_image'] = ''
         
-        for i, (label1, value1, label2, value2) in enumerate(fields):
-            row = table.rows[i]
-            row.cells[0].text = label1
-            row.cells[1].text = str(value1) if value1 else ''
-            row.cells[2].text = label2
-            row.cells[3].text = str(value2) if value2 else ''
+        # 渲染模板
+        doc.render(context)
         
         # 保存到内存
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
         
+        # 生成文件名
         date_str = record.created_at.strftime('%Y-%m-%d') if record.created_at else datetime.now().strftime('%Y-%m-%d')
         filename = f"{record.license_plate_number}_{date_str}.docx"
         
         return buffer, filename
     
-    @staticmethod
-    def export_batch(records):
-        """批量导出为ZIP"""
+    @classmethod
+    def export_batch(cls, records):
+        """批量导出为ZIP压缩包"""
         zip_buffer = io.BytesIO()
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for record in records:
-                doc_buffer, filename = WordExportService.export_single(record)
+                doc_buffer, filename = cls.export_single(record)
                 zip_file.writestr(filename, doc_buffer.getvalue())
         
         zip_buffer.seek(0)
