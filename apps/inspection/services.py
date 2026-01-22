@@ -11,13 +11,19 @@ class OCRService:
     
     @staticmethod
     def _get_client():
-        """获取阿里云OCR客户端"""
+        """获取阿里云OCR客户端，从数据库配置中读取API key"""
         from alibabacloud_ocr_api20210707.client import Client
         from alibabacloud_tea_openapi import models as open_api_models
+        from apps.users.models import SystemConfig
+        
+        # 从数据库获取启用的OCR配置
+        ocr_config = SystemConfig.get_active_config()
+        if not ocr_config:
+            raise ValueError('未配置OCR接口，请在后台管理中添加并启用OCR配置')
         
         config = open_api_models.Config(
-            access_key_id=settings.ALIBABA_CLOUD_ACCESS_KEY_ID,
-            access_key_secret=settings.ALIBABA_CLOUD_ACCESS_KEY_SECRET,
+            access_key_id=ocr_config.access_key_id,
+            access_key_secret=ocr_config.access_key_secret,
             endpoint='ocr-api.cn-hangzhou.aliyuncs.com'
         )
         return Client(config)

@@ -52,6 +52,7 @@ class InspectionRecordAdmin(admin.ModelAdmin):
     )
     
     def ocr_button(self, obj):
+        # 根据用户权限动态显示OCR按钮
         return mark_safe('''
             <div style="margin: 10px 0;">
                 <button type="button" id="ocr-btn" onclick="doOCR()" 
@@ -62,6 +63,32 @@ class InspectionRecordAdmin(admin.ModelAdmin):
             </div>
         ''')
     ocr_button.short_description = '操作'
+    
+    def get_fieldsets(self, request, obj=None):
+        """根据用户权限动态调整fieldsets，非OCR用户不显示OCR识别区域"""
+        fieldsets = super().get_fieldsets(request, obj)
+        
+        # 如果用户没有OCR权限，移除OCR识别区域
+        if not request.user.can_use_ocr:
+            fieldsets = [fs for fs in fieldsets if fs[0] != 'OCR识别']
+        
+        return fieldsets
+    
+    def has_module_permission(self, request):
+        """所有已登录用户都可以看到检验管理模块"""
+        return request.user.is_authenticated
+    
+    def has_view_permission(self, request, obj=None):
+        """所有已登录用户都可以查看"""
+        if request.user.is_superuser:
+            return True
+        if obj is not None:
+            return obj.created_by == request.user
+        return True
+    
+    def has_add_permission(self, request):
+        """所有已登录用户都可以新增"""
+        return request.user.is_authenticated
     
     def export_link(self, obj):
         return format_html(
@@ -153,3 +180,11 @@ class InspectionRecordAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+    
+    def get_readonly_fields(self, request, obj=None):
+        """根据用户权限动态调整只读字段"""
+        readonly = list(super().get_readonly_fields(request, obj))
+        # 如果用户没有OCR权限，不显示ocr_button
+        if not request.user.can_use_ocr and 'ocr_button' in readonly:
+            readonly.remove('ocr_button')
+        return readonly
