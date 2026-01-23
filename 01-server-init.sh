@@ -55,7 +55,7 @@ EOF
 fi
 
 # 设置部署脚本可执行权限
-chmod +x "$APP_DIR/deploy.sh"
+chmod +x "$APP_DIR"/*.sh 2>/dev/null || true
 
 echo ""
 echo "========== 服务器初始化完成 =========="
@@ -63,5 +63,6 @@ echo ""
 echo "下一步操作:"
 echo "1. 编辑环境配置: nano $APP_DIR/.env"
 echo "2. 切换到ubuntu用户: su - ubuntu"
-echo "3. 运行部署脚本: cd $APP_DIR && ./deploy.sh"
+echo "3. 拉取代码: cd $APP_DIR && ./02-code-pull.sh"
+echo "4. 运行部署脚本: ./03-deploy.sh"
 echo ""

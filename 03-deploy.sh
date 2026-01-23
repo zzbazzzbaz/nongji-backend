@@ -1,5 +1,5 @@
 #!/bin/bash
-# 农机检测后端自动部署脚本
+# 农机检测后端部署脚本
 # 部署目录: /opt/nongji_app
 # 运行端口: 8062
 
@@ -7,7 +7,6 @@ set -e
 
 # 配置变量
 APP_DIR="/opt/nongji_app"
-REPO_URL="https://github.com/zzbazzzbaz/nongji-backend.git"
 VENV_DIR="$APP_DIR/.venv"
 GUNICORN_BIND="0.0.0.0:8062"
 GUNICORN_WORKERS=4
@@ -32,50 +31,48 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 1. 从GitHub更新代码 (最多尝试100次)
-update_code() {
-    log_info "开始从GitHub更新代码..."
+# 安装依赖
+install_dependencies() {
+    log_info "安装Python依赖..."
     cd "$APP_DIR"
     
-    MAX_ATTEMPTS=100
-    ATTEMPT=0
+    # 检查uv是否安装
+    if ! command -v uv &> /dev/null; then
+        log_info "安装uv包管理器..."
+        export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
     
-    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-        ATTEMPT=$((ATTEMPT + 1))
-        log_info "尝试拉取代码 (第 $ATTEMPT/$MAX_ATTEMPTS 次)..."
-        
-        if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
-            log_info "代码更新成功!"
-            return 0
-        fi
-        
-        log_warn "拉取失败，等待3秒后重试..."
-        sleep 3
-    done
+    # 创建虚拟环境并安装依赖
+    if [ ! -d "$VENV_DIR" ]; then
+        log_info "创建虚拟环境..."
+        uv venv "$VENV_DIR"
+    fi
     
-    log_error "代码更新失败，已尝试 $MAX_ATTEMPTS 次"
-    return 1
+    # 使用国内镜像安装依赖
+    export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
+    uv pip install -e .
+    log_info "依赖安装完成!"
 }
 
-# 2. 生成数据库迁移
+# 生成数据库迁移
 make_migrations() {
     log_info "生成数据库迁移文件..."
     cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    python manage.py makemigrations
+    uv run python manage.py makemigrations
     log_info "数据库迁移文件生成完成!"
 }
 
-# 3. 应用数据库迁移
+# 应用数据库迁移
 apply_migrations() {
     log_info "应用数据库迁移..."
     cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
-    python manage.py migrate
+    uv run python manage.py migrate
     log_info "数据库迁移应用完成!"
 }
 
-# 4. 杀掉旧进程
+# 杀掉旧进程
 kill_old_process() {
     log_info "检查并杀掉旧的Gunicorn进程..."
     
@@ -106,18 +103,17 @@ kill_old_process() {
     log_info "旧进程清理完成!"
 }
 
-# 5. 重新启动
+# 启动服务器
 start_server() {
     log_info "启动Gunicorn服务器..."
     cd "$APP_DIR"
-    source "$VENV_DIR/bin/activate"
     
     # 收集静态文件
     log_info "收集静态文件..."
-    python manage.py collectstatic --noinput 2>/dev/null || true
+    uv run python manage.py collectstatic --noinput
     
     # 启动gunicorn (后台运行)
-    nohup gunicorn config.wsgi:application \
+    nohup uv run gunicorn config.wsgi:application \
         --bind "$GUNICORN_BIND" \
         --workers "$GUNICORN_WORKERS" \
         --timeout 120 \
@@ -139,33 +135,6 @@ start_server() {
     fi
 }
 
-# 安装依赖
-install_dependencies() {
-    log_info "安装Python依赖..."
-    cd "$APP_DIR"
-    
-    # 检查uv是否安装
-    if ! command -v uv &> /dev/null; then
-        log_info "安装uv包管理器..."
-        # 使用国内镜像加速
-        export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
-    fi
-    
-    # 创建虚拟环境并安装依赖
-    if [ ! -d "$VENV_DIR" ]; then
-        log_info "创建虚拟环境..."
-        uv venv "$VENV_DIR"
-    fi
-    
-    source "$VENV_DIR/bin/activate"
-    # 使用国内镜像安装依赖
-    export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
-    uv pip install -e .
-    log_info "依赖安装完成!"
-}
-
 # 主函数
 main() {
     log_info "========== 开始部署 =========="
@@ -174,7 +143,6 @@ main() {
     echo ""
     
     # 执行部署步骤
-    update_code
     install_dependencies
     make_migrations
     apply_migrations
