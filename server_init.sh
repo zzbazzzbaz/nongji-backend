@@ -19,6 +19,8 @@ apt install -y python3 python3-pip python3-venv git curl lsof
 
 # 安装uv包管理器
 echo "[3/6] 安装uv包管理器..."
+# 使用国内镜像加速下载
+export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="/root/.local/bin:$PATH"
 

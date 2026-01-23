@@ -147,6 +147,8 @@ install_dependencies() {
     # 检查uv是否安装
     if ! command -v uv &> /dev/null; then
         log_info "安装uv包管理器..."
+        # 使用国内镜像加速
+        export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
         curl -LsSf https://astral.sh/uv/install.sh | sh
         export PATH="$HOME/.local/bin:$PATH"
     fi
@@ -158,6 +160,8 @@ install_dependencies() {
     fi
     
     source "$VENV_DIR/bin/activate"
+    # 使用国内镜像安装依赖
+    export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
     uv pip install -e .
     log_info "依赖安装完成!"
 }
