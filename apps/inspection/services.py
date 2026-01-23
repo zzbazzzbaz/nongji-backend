@@ -213,9 +213,10 @@ class WordExportService:
         doc.save(buffer)
         buffer.seek(0)
         
-        # 生成文件名
+        # 生成文件名：id_车牌号_时间
         date_str = record.created_at.strftime('%Y-%m-%d') if record.created_at else datetime.now().strftime('%Y-%m-%d')
-        filename = f"{record.license_plate_number}_{date_str}.docx"
+        plate = record.license_plate_number or 'null'
+        filename = f"{record.id}_{plate}_{date_str}.docx"
         
         return buffer, filename
     

@@ -9,7 +9,7 @@ from .services import OCRService, WordExportService
 
 @admin.register(InspectionRecord)
 class InspectionRecordAdmin(admin.ModelAdmin):
-    list_display = ['license_plate_number', 'owner', 'vehicle_type', 'brand', 'created_by', 'created_at', 'export_link']
+    list_display = ['id', 'license_plate_number', 'owner', 'vehicle_type', 'brand', 'created_by', 'created_at', 'export_link']
     list_filter = ['vehicle_type', 'created_at']
     search_fields = ['license_plate_number', 'owner', 'chassis_number', 'engine_number']
     readonly_fields = ['created_at', 'updated_at', 'created_by', 'ocr_button']

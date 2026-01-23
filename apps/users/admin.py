@@ -13,7 +13,7 @@ admin.site.unregister(TokenProxy)
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ['username', 'phone', 'role', 'is_active', 'date_joined']
+    list_display = ['id', 'username', 'phone', 'role', 'is_active', 'date_joined']
     list_filter = ['is_superuser', 'role', 'is_active']
     search_fields = ['username', 'phone']
     ordering = ['-date_joined']
@@ -57,7 +57,7 @@ class UserAdmin(BaseUserAdmin):
 @admin.register(SystemConfig)
 class SystemConfigAdmin(admin.ModelAdmin):
     """OCR配置后台管理"""
-    list_display = ['name', 'access_key_id', 'is_active', 'created_at', 'updated_at']
+    list_display = ['id', 'name', 'access_key_id', 'is_active', 'created_at', 'updated_at']
     list_filter = ['is_active']
     search_fields = ['name', 'remark']
     ordering = ['-is_active', '-created_at']
