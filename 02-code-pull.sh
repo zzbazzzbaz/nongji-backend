@@ -6,6 +6,7 @@ set -e
 
 # 配置变量
 APP_DIR="/opt/nongji_app"
+REPO_URL="https://github.com/zzbazzzbaz/nongji-backend.git"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -37,7 +38,7 @@ update_code() {
         ATTEMPT=$((ATTEMPT + 1))
         log_info "尝试拉取代码 (第 $ATTEMPT/$MAX_ATTEMPTS 次)..."
         
-        if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
+        if git pull "$REPO_URL" main 2>/dev/null || git pull "$REPO_URL" master 2>/dev/null; then
             log_info "代码更新成功!"
             return 0
         fi
@@ -54,6 +55,7 @@ update_code() {
 main() {
     log_info "========== 开始拉取代码 =========="
     log_info "部署目录: $APP_DIR"
+    log_info "仓库地址: $REPO_URL"
     echo ""
     
     update_code
