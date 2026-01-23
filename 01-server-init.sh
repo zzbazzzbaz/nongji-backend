@@ -54,6 +54,10 @@ EOF
     echo "请编辑 $APP_DIR/.env 文件配置正确的密钥!"
 fi
 
+# 配置Git凭据缓存 (避免每次拉取都输入账号密码)
+echo "[7/7] 配置Git凭据缓存..."
+git config --global credential.helper store
+
 # 设置部署脚本可执行权限
 chmod +x "$APP_DIR"/*.sh 2>/dev/null || true
 
