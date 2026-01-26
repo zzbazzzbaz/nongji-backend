@@ -44,15 +44,9 @@ install_dependencies() {
         export PATH="$HOME/.local/bin:$PATH"
     fi
     
-    # 创建虚拟环境并安装依赖
-    if [ ! -d "$VENV_DIR" ]; then
-        log_info "创建虚拟环境..."
-        uv venv "$VENV_DIR"
-    fi
-    
-    # 使用国内镜像安装依赖
+    # 使用国内镜像同步依赖（uv sync 自动管理虚拟环境）
     export UV_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple/"
-    uv pip install -e .
+    uv sync --frozen
     log_info "依赖安装完成!"
 }
 
@@ -112,16 +106,15 @@ start_server() {
     log_info "收集静态文件..."
     uv run python manage.py collectstatic --noinput
     
-    # 启动gunicorn (后台运行)
-    nohup uv run gunicorn config.wsgi:application \
+    # 启动gunicorn (--daemon 自动后台运行)
+    uv run gunicorn config.wsgi:application \
         --bind "$GUNICORN_BIND" \
         --workers "$GUNICORN_WORKERS" \
         --timeout 120 \
         --access-logfile "$APP_DIR/access.log" \
         --error-logfile "$LOG_FILE" \
         --pid "$PID_FILE" \
-        --daemon \
-        2>&1 &
+        --daemon
     
     sleep 2
     
