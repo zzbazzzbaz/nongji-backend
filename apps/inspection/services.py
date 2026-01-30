@@ -6,6 +6,7 @@ from datetime import datetime
 from django.conf import settings
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
+from PIL import Image
 
 
 class OCRService:
@@ -146,6 +147,31 @@ class WordExportService:
                 return os.path.join(settings.MEDIA_ROOT, image_field.name)
         return None
     
+    @staticmethod
+    def _get_image_size(image_path, max_width_mm=47, max_height_mm=33):
+        """
+        计算图片插入尺寸，保持比例且不超过最大尺寸
+        返回 (width_mm, height_mm)
+        """
+        try:
+            with Image.open(image_path) as img:
+                img_width, img_height = img.size
+                aspect_ratio = img_width / img_height
+                
+                # 根据宽度计算高度
+                width_mm = max_width_mm
+                height_mm = width_mm / aspect_ratio
+                
+                # 如果高度超过最大高度，按高度缩放
+                if height_mm > max_height_mm:
+                    height_mm = max_height_mm
+                    width_mm = height_mm * aspect_ratio
+                
+                return width_mm, height_mm
+        except Exception:
+            # 出错时返回默认尺寸
+            return max_width_mm, max_height_mm
+    
     @classmethod
     def export_single(cls, record):
         """
@@ -190,8 +216,9 @@ class WordExportService:
         # 处理图片 - 制动性能检验报告
         brake_image_path = cls._get_image_path(record.brake_report_image)
         if brake_image_path and os.path.exists(brake_image_path):
+            w, h = cls._get_image_size(brake_image_path)
             context['brake_report_image'] = InlineImage(
-                doc, brake_image_path, width=Mm(150)
+                doc, brake_image_path, width=Mm(w), height=Mm(h)
             )
         else:
             context['brake_report_image'] = ''
@@ -199,8 +226,9 @@ class WordExportService:
         # 处理图片 - 前照灯检验报告
         headlight_image_path = cls._get_image_path(record.headlight_report_image)
         if headlight_image_path and os.path.exists(headlight_image_path):
+            w, h = cls._get_image_size(headlight_image_path)
             context['headlight_report_image'] = InlineImage(
-                doc, headlight_image_path, width=Mm(150)
+                doc, headlight_image_path, width=Mm(w), height=Mm(h)
             )
         else:
             context['headlight_report_image'] = ''

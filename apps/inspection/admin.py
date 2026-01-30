@@ -3,6 +3,7 @@ from django.urls import path
 from django.http import JsonResponse, HttpResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from urllib.parse import quote
 from .models import InspectionRecord
 from .services import OCRService, WordExportService
 
@@ -93,7 +94,7 @@ class InspectionRecordAdmin(admin.ModelAdmin):
     
     def export_link(self, obj):
         return format_html(
-            '<a href="/api/v1/inspections/{}/export/" target="_blank">导出</a>',
+            '<a href="export/{}/">导出</a>',
             obj.pk
         )
     export_link.short_description = '导出'
@@ -102,8 +103,29 @@ class InspectionRecordAdmin(admin.ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path('ocr-recognize/', self.admin_site.admin_view(self.ocr_recognize_view), name='inspection_ocr_recognize'),
+            path('export/<int:pk>/', self.admin_site.admin_view(self.export_single_view), name='inspection_export_single'),
         ]
         return custom_urls + urls
+    
+    def export_single_view(self, request, pk):
+        """导出单条检验记录为Word文档"""
+        try:
+            record = InspectionRecord.objects.get(pk=pk)
+            # 检查权限
+            if not request.user.is_superuser and record.created_by != request.user:
+                return HttpResponse('无权限导出此记录', status=403)
+            
+            doc_buffer, filename = WordExportService.export_single(record)
+            response = HttpResponse(
+                doc_buffer.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+            response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
+            return response
+        except InspectionRecord.DoesNotExist:
+            return HttpResponse('记录不存在', status=404)
+        except Exception as e:
+            return HttpResponse(f'导出失败: {str(e)}', status=500)
     
     def ocr_recognize_view(self, request):
         """OCR识别接口"""
@@ -202,7 +224,7 @@ class InspectionRecordAdmin(admin.ModelAdmin):
                     doc_buffer.getvalue(),
                     content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
                 )
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
                 return response
             except Exception as e:
                 self.message_user(request, f'导出失败: {str(e)}', level='error')
@@ -212,7 +234,7 @@ class InspectionRecordAdmin(admin.ModelAdmin):
             try:
                 zip_buffer, filename = WordExportService.export_batch(queryset)
                 response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                response['Content-Disposition'] = f"attachment; filename*=UTF-8''{quote(filename)}"
                 return response
             except Exception as e:
                 self.message_user(request, f'批量导出失败: {str(e)}', level='error')
